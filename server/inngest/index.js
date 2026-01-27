@@ -1,4 +1,4 @@
-import { User } from "@clerk/express";
+import User from "../models/User.js"
 import { Inngest } from "inngest";
 
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
