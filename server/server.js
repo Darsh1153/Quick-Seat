@@ -21,9 +21,21 @@ app.use(express.json());
 app.use(clerkMiddleware())
 
 // Inngest endpoint must be registered before catch-all routes
-app.use("/api/inngest", serve({ client: inngest, functions }));
+// Inngest needs to handle GET, POST, PUT requests
+// Use app.all to handle all HTTP methods
+const inngestHandler = serve({ client: inngest, functions });
+app.all("/api/inngest", (req, res, next) => {
+    console.log(`Inngest request: ${req.method} ${req.path}`);
+    return inngestHandler(req, res, next);
+});
 
-app.use("/", (req, res) => {
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Root endpoint - only match exact "/" path, not all routes
+app.get("/", (req, res) => {
     res.send("Hello from server");
 })
 

@@ -32,15 +32,20 @@ const syncUserCreation = inngest.createFunction(
                 await ensureDBConnection();
                 
                 // Inngest Clerk integration sends data in event.data
-                const data = event.data;
-                console.log('Received user.created event:', JSON.stringify(data, null, 2));
+                // The data structure from Inngest Clerk integration is: event.data.data (nested)
+                const rawData = event.data;
+                console.log('Received user.created event - full event:', JSON.stringify(event, null, 2));
+                console.log('Received user.created event - data:', JSON.stringify(rawData, null, 2));
+                
+                // Inngest Clerk integration wraps the data in a 'data' property
+                const data = rawData.data || rawData;
                 
                 // Handle different possible data structures from Inngest Clerk integration
-                const id = data.id || data.data?.id;
-                const firstName = data.first_name || data.data?.first_name || data.firstName;
-                const lastName = data.last_name || data.data?.last_name || data.lastName;
-                const emailAddresses = data.email_addresses || data.data?.email_addresses || data.emailAddresses || [];
-                const imageUrl = data.image_url || data.data?.image_url || data.imageUrl || data.primary_image_url || data.data?.primary_image_url || '';
+                const id = data.id;
+                const firstName = data.first_name || data.firstName;
+                const lastName = data.last_name || data.lastName;
+                const emailAddresses = data.email_addresses || data.emailAddresses || [];
+                const imageUrl = data.image_url || data.imageUrl || data.primary_image_url || '';
                 
                 // Validate required fields
                 const email = emailAddresses?.[0]?.email_address || emailAddresses?.[0]?.emailAddress || emailAddresses?.[0];
@@ -94,10 +99,13 @@ const syncUserDeletion = inngest.createFunction(
                 // Ensure database connection
                 await ensureDBConnection();
                 
-                const data = event.data;
-                console.log('Received user.deleted event:', JSON.stringify(data, null, 2));
+                const rawData = event.data;
+                console.log('Received user.deleted event - full event:', JSON.stringify(event, null, 2));
+                console.log('Received user.deleted event - data:', JSON.stringify(rawData, null, 2));
                 
-                const id = data.id || data.data?.id;
+                // Inngest Clerk integration wraps the data in a 'data' property
+                const data = rawData.data || rawData;
+                const id = data.id;
                 if (!id) {
                     throw new Error('User ID is required but not provided');
                 }
@@ -129,14 +137,18 @@ const syncUserUpdation = inngest.createFunction(
                 // Ensure database connection
                 await ensureDBConnection();
                 
-                const data = event.data;
-                console.log('Received user.updated event:', JSON.stringify(data, null, 2));
+                const rawData = event.data;
+                console.log('Received user.updated event - full event:', JSON.stringify(event, null, 2));
+                console.log('Received user.updated event - data:', JSON.stringify(rawData, null, 2));
                 
-                const id = data.id || data.data?.id;
-                const firstName = data.first_name || data.data?.first_name || data.firstName;
-                const lastName = data.last_name || data.data?.last_name || data.lastName;
-                const emailAddresses = data.email_addresses || data.data?.email_addresses || data.emailAddresses || [];
-                const imageUrl = data.image_url || data.data?.image_url || data.imageUrl || data.primary_image_url || data.data?.primary_image_url || '';
+                // Inngest Clerk integration wraps the data in a 'data' property
+                const data = rawData.data || rawData;
+                
+                const id = data.id;
+                const firstName = data.first_name || data.firstName;
+                const lastName = data.last_name || data.lastName;
+                const emailAddresses = data.email_addresses || data.emailAddresses || [];
+                const imageUrl = data.image_url || data.imageUrl || data.primary_image_url || '';
                 
                 if (!id) {
                     throw new Error('User ID is required but not provided');
