@@ -5,13 +5,19 @@ import connectDB from "./configs/db.js";
 import { clerkMiddleware } from '@clerk/express'
 import { serve } from "inngest/express";
 import { inngest, functions } from "./inngest/index.js"
+import { handleClerkWebhook } from "./routes/webhook.js";
 
 const app = express();
 
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
 app.use(cors());
+
+// Clerk webhook endpoint - must be before JSON parsing middleware
+// Webhook needs raw body for signature verification
+app.post("/api/webhooks/clerk", express.raw({ type: 'application/json' }), handleClerkWebhook);
+
+app.use(express.json());
 app.use(clerkMiddleware())
 
 // Inngest endpoint must be registered before catch-all routes
