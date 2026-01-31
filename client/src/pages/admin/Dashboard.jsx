@@ -3,9 +3,14 @@ import { dummyDashboardData } from '../../assets/assets';
 import { ChartLineIcon, CircleDollarSignIcon, PlayCircleIcon, StarIcon, UsersIcon } from 'lucide-react';
 import Title from '../../components/admin/Title';
 import { dateFormat } from '../../lib/dateFormat';
+import { useAppContext } from '../../context/AppContext';
+import { apiRequest } from '../../lib/api';
+import toast from 'react-hot-toast';
 
 const Dashboard = () => {
   const currency = import.meta.env.VITE_CURRENCY;
+
+  const { getToken, user, isUserLoaded, IMAGE_URL } = useAppContext();
 
   const [dashboardData, setDashboardData] = useState({
     totalBookings: 0,
@@ -17,19 +22,78 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDashboardData();
-  }, []);
+    // Wait for user data to be loaded before making API calls
+    if (!isUserLoaded) {
+      return;
+    }
+    
+    if (user) {
+      getDashboardData();
+    } else {
+      setLoading(false);
+    }
+  }, [user, isUserLoaded]);
 
   const getDashboardData = async () => {
-    setDashboardData(dummyDashboardData);
-    setLoading(false);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      
+      // Safely get token - handle case where user might not be fully authenticated
+      let token;
+      try {
+        token = await getToken();
+        console.log(token);
+      } catch (tokenError) {
+        console.error("Error getting token:", tokenError);
+        // If we can't get token, user might not be authenticated yet
+        setLoading(false);
+        return;
+      }
+      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
+      const data = await apiRequest("/api/admin/dashboard", {
+        method: 'GET',
+      }, token);
+      
+      if(data.success) {
+        // Normalize the response - backend might return activeShow or activeShows
+        const normalizedData = {
+          ...data.dashboardData,
+          activeShows: data.dashboardData.activeShows || data.dashboardData.activeShow || []
+        };
+        setDashboardData(normalizedData);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+      const errorMessage = error.message || "Failed to fetch dashboard data";
+      // Filter out technical errors like "User is not defined" - don't show them to users
+      if (errorMessage && 
+          !errorMessage.toLowerCase().includes("user is not defined") && 
+          !errorMessage.toLowerCase().includes("user") &&
+          !errorMessage.toLowerCase().includes("unauthorized")) {
+        toast.error(errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   const dashboardFeed = [
     { name: "Total Bookings", value: dashboardData.totalBookings || 0, icon: ChartLineIcon },
-    { name: "Total Revenue", value: currency + dashboardData.totalRevenue || 0, icon: CircleDollarSignIcon },
+    { name: "Total Revenue", value: currency + (dashboardData.totalRevenue || 0), icon: CircleDollarSignIcon },
     { name: "Total Users", value: dashboardData.totalUser || 0, icon: UsersIcon },
-    { name: "Active Shows", value: dashboardData.activeShows.length || 0, icon: PlayCircleIcon }
+    { name: "Active Shows", value: (dashboardData.activeShows || dashboardData.activeShow || []).length, icon: PlayCircleIcon }
   ]
 
   return loading ? <h1>Loading...</h1> : (
@@ -51,9 +115,9 @@ const Dashboard = () => {
 
       <div className='mt-10 text-lg font-medium'>Active Shows</div>
       <div className='flex flex-wrap gap-6 mt-4 max-w-5xl'>
-        {dashboardData.activeShows.map((show) => (
-          <div className='w-4xl w-55 rounded-lg h-full pb-3 bg-primmary/10 boder border-primmary/20 hover:translate-y-1 translation duration-300 overflow-hidden'>
-            <img alt='img' src={show.movie.poster_path} className='h-60 w-full object-cover' />
+        {(dashboardData.activeShows || []).map((show) => (
+          <div key={show._id || show.movie._id} className='w-4xl w-55 rounded-lg h-full pb-3 bg-primmary/10 boder border-primmary/20 hover:translate-y-1 translation duration-300 overflow-hidden'>
+            <img alt='img' src={IMAGE_URL + show.movie.poster_path} className='h-60 w-full object-cover' />
             <p className='font-medium p-2 truncate'>{show.movie.title}</p>
             <div className='flex items-center justify-between px-2'>
               <p className='text-lg font-medium'>{show.showPrice}</p>

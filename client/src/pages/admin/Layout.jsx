@@ -4,6 +4,8 @@ import { Outlet } from "react-router-dom";
 import Sidebar from "../../components/admin/Sidebar";
 
 const Layout = () => {
+  // Admin check is handled automatically in AppContext
+  // No need to check again here since App.jsx already verifies isAdmin before rendering Layout
   return (
     <>
       <Navbar />
@@ -14,7 +16,7 @@ const Layout = () => {
         </div>
       </div>
     </>
-  )
+  );
 }
 
 export default Layout

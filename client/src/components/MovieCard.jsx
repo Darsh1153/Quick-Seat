@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { StarIcon } from "lucide-react";
 import formatTime from '../lib/formatTime';
 
-const MovieCard = ({ show }) => {
+const MovieCard = ({ show, imageUrl }) => {
     const navigate = useNavigate();
 
     const { _id, title, backdrop_path, genres, release_date, vote_average, runtime } = show;
@@ -11,7 +11,7 @@ const MovieCard = ({ show }) => {
     return (
         <div className='w-66 flex flex-col justify-between p-3 bg-gray-800'>
 
-            <img onClick={() => {navigate(`/movies/${_id}`)}} src={backdrop_path} alt='movie-img'
+            <img onClick={() => {navigate(`/movies/${_id}`)}} src={imageUrl + backdrop_path} alt='movie-img'
             className='rounded-lg w-full' />
 
             <p className='font-semibold mt-2'>{title}</p>

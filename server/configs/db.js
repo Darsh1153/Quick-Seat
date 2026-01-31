@@ -19,10 +19,30 @@ const connectDB = async () => {
         
         mongoose.connection.on("connected", () => console.log("Server connected with mongodb"));
         mongoose.connection.on("error", (err) => console.error("MongoDB connection error:", err));
+        mongoose.connection.on("disconnected", () => console.log("MongoDB disconnected"));
         
-        await mongoose.connect(`${process.env.DATABASE_URI}/quickseat`);
+        // Get the connection string
+        const databaseUri = process.env.DATABASE_URI;
+        
+        if (!databaseUri) {
+            throw new Error("DATABASE_URI environment variable is not set");
+        }
+        
+        console.log("Attempting to connect to MongoDB...");
+        console.log("Connection string (masked):", databaseUri.replace(/:[^:@]+@/, ':****@'));
+        
+        // Connect to MongoDB - specify database name in options if not in URI
+        const connectionOptions = {
+            dbName: 'quickseat',
+            retryWrites: true,
+            w: 'majority'
+        };
+        
+        await mongoose.connect(databaseUri, connectionOptions);
+        console.log("MongoDB connected successfully to database: quickseat");
     } catch(err){
-        console.error("MongoDB not connected:", err.message);
+        console.error("MongoDB connection failed:", err.message);
+        console.error("Full error:", err);
         throw err; // Re-throw to allow Inngest to retry
     }
 }

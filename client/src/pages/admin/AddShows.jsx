@@ -3,27 +3,50 @@ import { dummyShowsData } from '../../assets/assets';
 import Title from '../../components/admin/Title';
 import { StarIcon, CheckIcon } from "lucide-react";
 import kConverter from "../../lib/kConverter";
-0
+import toast from 'react-hot-toast';
+import { useAppContext } from '../../context/AppContext';
+import { apiRequest } from '../../lib/api';
+
 const AddShows = () => {
   const currency = import.meta.env.VITE_CURRENCY;
 
   const [nowPlayingMovies, setNowPlayingMovies] = useState([]);
-  const [selectedMovies, setSelectedMovies] = useState(true);
-  const [showPrice, setShowPrice] = useState();
-  const [dateTimeInput, setDateTimeInput] = useState();
+  const [selectedMovies, setSelectedMovies] = useState(null);
+  const [showPrice, setShowPrice] = useState("");
+  const [dateTimeInput, setDateTimeInput] = useState("");
   const [dateTimeSelection, setDateTimeSelection] = useState({});
+  const [addShow, setAddShow] = useState(false);
 
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    getAllShowData();
-  }, []);
+  const { getToken, user } = useAppContext();
 
-  const getAllShowData = async () => {
-    setNowPlayingMovies(dummyShowsData);
-    setLoading(false);
+  useEffect(() => {
+    if (user) {
+      fetchNowPlayingMovies();
+    }
+  }, [user]);
+
+  const fetchNowPlayingMovies = async () => {
+    try {
+      setLoading(true);
+      const token = await getToken();
+      const data = await apiRequest("/api/show/now-playing", {
+        method: 'GET',
+      }, token);
+      console.log("Now playing movies data:", data);
+      if (data.success) {
+        setNowPlayingMovies(data.movies);
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to fetch now playing movies");
+      console.error("Error fetching now playing movies:", error);
+    } finally {
+      setLoading(false);
+    }
   }
-  console.log(nowPlayingMovies);
 
   const handleDateTimeAdd = () => {
     if (!dateTimeInput) return;
@@ -62,10 +85,59 @@ const AddShows = () => {
     });
   };
 
+  const handleAddShow = async () => {
+    // Basic validation before making the API call
+    if (!selectedMovies || !showPrice || Object.keys(dateTimeSelection).length === 0) {
+      toast.error("Please select a movie, set show price, and select date and time");
+      return;
+    }
+
+    try {
+      setAddShow(true);
+
+      // Transform dateTimeSelection into the format expected by the backend
+      // Backend expects: showInput: [{ date, time: [time1, time2, ...] }, ...]
+      const showInput = Object.entries(dateTimeSelection).map(([date, times]) => ({
+        date,
+        time: times,
+      }));
+
+      const payload = {
+        movieId: selectedMovies,
+        showInput,
+        showPrice: Number(showPrice),
+      };
+
+      const token = await getToken();
+      const data = await apiRequest("/api/show/add-show", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }, token);
+
+      console.log("Add show response:", data);
+
+      if (data?.success) {
+        toast.success(data.message || "Show added successfully!");
+        setSelectedMovies(null);
+        setShowPrice("");
+        setDateTimeSelection({});
+      } else {
+        toast.error(data?.message || "Failed to add show");
+      }
+    } catch (error) {
+      console.error("Error adding show:", error);
+      toast.error(error.message || "An error occurred. Please try again.");
+    } finally {
+      setAddShow(false);
+    }
+  }
+
+
 
   return loading ? <h1>Loading...</h1> : (
     <div>
       <Title text1="Add" text2="Shows" />
+
       <p className='mt-10 text-lg font-medium'>Now Playing Movies</p>
 
       <div className='overflow-x-auto pb-4 mt-5'>
@@ -170,6 +242,13 @@ const AddShows = () => {
         </div>
       )}
 
+      <div className="mt-8">
+        <button onClick={handleAddShow} disabled={addShow}
+          className={`bg-primmary text-white px-8 py-3 rounded-lg hover:bg-primmary/90 transition-all cursor-pointer font-medium`}
+        >
+          Add Show
+        </button>
+      </div>
 
     </div>
   )
