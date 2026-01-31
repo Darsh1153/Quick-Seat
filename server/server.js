@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import connectDB from "./configs/db.js";
-import { clerkMiddleware } from '@clerk/express'
+import { clerkMiddleware, clerkClient } from '@clerk/express'
 import { serve } from "inngest/express";
 import { inngest, functions } from "./inngest/index.js"
 import { handleClerkWebhook } from "./routes/webhook.js";
@@ -12,8 +12,6 @@ import bookingRouter from "./routes/bookingRoutes.js";
 import adminRouter from "./routes/adminRoutes.js";
 import userRouter from "./routes/userRoutes.js";
 
-
-import { clerkClient } from "@clerk/express";
 import { stripeWebhooks } from "./controllers/stripeWebhooks.js";
 
 const app = express();
@@ -107,19 +105,29 @@ if (!process.env.CLERK_SECRET_KEY) {
 
 // Clerk middleware processes Authorization headers and sets req.auth()
 // It allows requests without auth (for public routes) but validates tokens when present
-app.use(clerkMiddleware({
-    // Clerk will automatically use CLERK_SECRET_KEY from environment
-    // This allows public routes while still validating tokens for protected routes
-}));
+try {
+    app.use(clerkMiddleware({
+        // Clerk will automatically use CLERK_SECRET_KEY from environment
+        // This allows public routes while still validating tokens for protected routes
+    }));
+} catch (error) {
+    console.error("Error setting up Clerk middleware:", error);
+    // Continue without Clerk middleware if it fails
+}
 
 // Inngest endpoint must be registered before catch-all routes
 // Inngest needs to handle GET, POST, PUT requests
 // Use app.all to handle all HTTP methods
-const inngestHandler = serve({ client: inngest, functions });
-app.all("/api/inngest", (req, res, next) => {
-    console.log(`Inngest request: ${req.method} ${req.path}`);
-    return inngestHandler(req, res, next);
-});
+try {
+    const inngestHandler = serve({ client: inngest, functions });
+    app.all("/api/inngest", (req, res, next) => {
+        console.log(`Inngest request: ${req.method} ${req.path}`);
+        return inngestHandler(req, res, next);
+    });
+} catch (error) {
+    console.error("Error setting up Inngest:", error);
+    // Continue without Inngest if it fails
+}
 
 // Health check endpoint
 app.get("/api/health", async (req, res) => {
@@ -179,8 +187,23 @@ app.get("/api/debug/auth", (req, res) => {
 
 // Root endpoint - only match exact "/" path, not all routes
 app.get("/", (req, res) => {
-    res.send("Hello from server");
-})
+    try {
+        res.send("Hello from server");
+    } catch (error) {
+        console.error("Error in root endpoint:", error);
+        res.status(500).send("Server error");
+    }
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+    console.error("Unhandled error:", err);
+    res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
 
 // Middleware to ensure database connection before processing API requests
 const dbConnected = async (req, res, next) => {
