@@ -102,6 +102,11 @@ export const createBooking = async (req, res) => {
 
 
         // Stripe payment gateway
+        if (!process.env.STRIPE_SECRET_KEY) {
+            console.error("[createBooking] STRIPE_SECRET_KEY is not set in environment variables");
+            return res.json({success: false, message: "Stripe configuration error. Please contact support."});
+        }
+
         const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
 
         // creating line items to stripe
@@ -132,7 +137,14 @@ export const createBooking = async (req, res) => {
 
         res.json({success: true, url: session.url});
     } catch (err) {
-        res.json({success: false, message: err.message});
+        console.error("[createBooking] Error:", {
+            error: err,
+            errorMessage: err.message,
+            errorStack: err.stack,
+            hasStripeKey: !!process.env.STRIPE_SECRET_KEY,
+            stripeKeyLength: process.env.STRIPE_SECRET_KEY?.length || 0
+        });
+        res.json({success: false, message: err.message || "Failed to create booking"});
     }
 }
 

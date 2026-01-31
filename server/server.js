@@ -182,6 +182,26 @@ app.get("/", (req, res) => {
     res.send("Hello from server");
 })
 
+// Middleware to ensure database connection before processing API requests
+const dbConnected = async (req, res, next) => {
+    try {
+        // Check if already connected
+        const mongoose = (await import("mongoose")).default;
+        if (mongoose.connection.readyState !== 1) {
+            // Not connected, try to connect
+            await connectDB();
+        }
+        next();
+    } catch (error) {
+        console.error("Database connection error in middleware:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Database connection failed",
+            error: error.message
+        });
+    }
+};
+
 // Handle OPTIONS preflight for all API routes using middleware
 app.use("/api", (req, res, next) => {
     if (req.method === 'OPTIONS') {
@@ -192,6 +212,15 @@ app.use("/api", (req, res, next) => {
         return res.sendStatus(204);
     }
     next();
+});
+
+// Ensure database connection for all API routes (except health check and webhooks)
+app.use("/api", (req, res, next) => {
+    // Skip DB check for health endpoint and webhooks
+    if (req.path === '/health' || req.path.startsWith('/webhooks') || req.path.startsWith('/stripe')) {
+        return next();
+    }
+    return dbConnected(req, res, next);
 });
 
 app.use("/api/stripe", express.raw({ type: 'application/json' }), stripeWebhooks);
