@@ -20,9 +20,16 @@ const FeaturedSection = () => {
       </div>
 
       <div className='flex flex-wrap justify-center gap-2'>
-        {shows.slice(0, 4).map((show) => (
+        {shows && shows.length > 0 ? (
+          shows.slice(0, 4).map((show) => (
             <MovieCard key={show._id} show={show} imageUrl={IMAGE_URL} /> 
-        ))}
+          ))
+        ) : (
+          <div className='text-center py-10 w-full'>
+            <p className='text-gray-400'>No shows available at the moment</p>
+            <p className='text-gray-500 text-sm mt-2'>Check back later for upcoming shows</p>
+          </div>
+        )}
       </div>
 
       <div className='flex justify-center mt-20'>

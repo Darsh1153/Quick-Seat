@@ -104,7 +104,12 @@ export const addShow = async (req, res) => {
 // API to get all upcoming show with unique
 export const getShows = async (req, res) => {
     try {
-        const shows = await Show.find({showDateTime: {$gte: new Date()}}).populate("movie").sort({ showDateTime: 1 });
+        const currentDate = new Date();
+        console.log("[getShows] Fetching shows with date >= ", currentDate);
+        
+        const shows = await Show.find({showDateTime: {$gte: currentDate}}).populate("movie").sort({ showDateTime: 1 });
+        
+        console.log("[getShows] Found shows:", shows.length);
 
         // Filter unique movies by _id
         const uniqueMovieMap = new Map();
@@ -118,6 +123,7 @@ export const getShows = async (req, res) => {
         });
 
         const uniqueShows = Array.from(uniqueMovieMap.values());
+        console.log("[getShows] Unique movies:", uniqueShows.length);
         res.json({ success: true, shows: uniqueShows });
     } catch (err) {
         console.error("Error fetching shows:", err);
