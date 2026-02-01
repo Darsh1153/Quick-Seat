@@ -201,6 +201,12 @@ export const checkPaymentStatus = async (req, res) => {
         if (booking.paymentLink) {
             try {
                 const Stripe = (await import("stripe")).default;
+                
+                if (!process.env.STRIPE_SECRET_KEY) {
+                    console.error("[checkPaymentStatus] STRIPE_SECRET_KEY not set");
+                    return res.json({success: false, message: "Stripe configuration error"});
+                }
+                
                 const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
                 
                 console.log("[checkPaymentStatus] Payment link:", booking.paymentLink);
@@ -210,31 +216,58 @@ export const checkPaymentStatus = async (req, res) => {
                 // Format 2: https://checkout.stripe.com/pay/cs_test_...
                 let sessionId = null;
                 const patterns = [
-                    /\/pay\/(cs_[a-zA-Z0-9]+)/,
-                    /\/c\/pay\/(cs_[a-zA-Z0-9]+)/,
-                    /cs_test_[a-zA-Z0-9]+/,
-                    /cs_live_[a-zA-Z0-9]+/
+                    /\/c\/pay\/(cs_[a-zA-Z0-9_]+)/,  // https://checkout.stripe.com/c/pay/cs_test_...
+                    /\/pay\/(cs_[a-zA-Z0-9_]+)/,     // https://checkout.stripe.com/pay/cs_test_...
+                    /(cs_test_[a-zA-Z0-9_]+)/,       // Direct session ID (test)
+                    /(cs_live_[a-zA-Z0-9_]+)/        // Direct session ID (live)
                 ];
                 
                 for (const pattern of patterns) {
                     const match = booking.paymentLink.match(pattern);
                     if (match) {
                         sessionId = match[1] || match[0];
+                        console.log("[checkPaymentStatus] Matched pattern, sessionId:", sessionId);
                         break;
                     }
                 }
                 
                 if (!sessionId) {
-                    console.error("[checkPaymentStatus] Could not extract session ID from payment link");
-                    return res.json({success: true, isPaid: booking.isPaid, booking, message: "Could not extract session ID"});
+                    console.error("[checkPaymentStatus] Could not extract session ID from payment link:", booking.paymentLink);
+                    return res.json({
+                        success: false, 
+                        isPaid: booking.isPaid, 
+                        booking, 
+                        message: "Could not extract session ID from payment link"
+                    });
                 }
                 
                 console.log("[checkPaymentStatus] Extracted session ID:", sessionId);
-                const session = await stripeInstance.checkout.sessions.retrieve(sessionId);
                 
-                console.log("[checkPaymentStatus] Session payment status:", session.payment_status);
-                console.log("[checkPaymentStatus] Session status:", session.status);
+                // Retrieve the session from Stripe
+                let session;
+                try {
+                    session = await stripeInstance.checkout.sessions.retrieve(sessionId);
+                } catch (retrieveError) {
+                    console.error("[checkPaymentStatus] Error retrieving session from Stripe:", {
+                        error: retrieveError,
+                        message: retrieveError.message,
+                        sessionId
+                    });
+                    return res.json({
+                        success: false, 
+                        message: `Could not retrieve session from Stripe: ${retrieveError.message}`
+                    });
+                }
                 
+                console.log("[checkPaymentStatus] Session retrieved:", {
+                    id: session.id,
+                    payment_status: session.payment_status,
+                    status: session.status,
+                    mode: session.mode,
+                    metadata: session.metadata
+                });
+                
+                // Check if payment is completed
                 if (session.payment_status === 'paid' || session.status === 'complete') {
                     // Update booking status
                     booking.isPaid = true;
@@ -242,19 +275,45 @@ export const checkPaymentStatus = async (req, res) => {
                     await booking.save();
                     
                     console.log("[checkPaymentStatus] Booking updated successfully:", booking._id);
-                    return res.json({success: true, isPaid: true, booking, updated: true});
+                    return res.json({
+                        success: true, 
+                        isPaid: true, 
+                        booking, 
+                        updated: true,
+                        paymentStatus: session.payment_status
+                    });
                 } else {
-                    console.log("[checkPaymentStatus] Payment not completed. Status:", session.payment_status);
-                    return res.json({success: true, isPaid: false, booking, paymentStatus: session.payment_status});
+                    console.log("[checkPaymentStatus] Payment not completed:", {
+                        payment_status: session.payment_status,
+                        status: session.status,
+                        bookingId: booking._id
+                    });
+                    return res.json({
+                        success: true, 
+                        isPaid: false, 
+                        booking, 
+                        paymentStatus: session.payment_status,
+                        sessionStatus: session.status,
+                        message: `Payment status: ${session.payment_status}`
+                    });
                 }
             } catch (stripeError) {
                 console.error("[checkPaymentStatus] Error checking Stripe session:", {
                     error: stripeError,
                     message: stripeError.message,
-                    stack: stripeError.stack
+                    stack: stripeError.stack,
+                    type: stripeError.type,
+                    code: stripeError.code
                 });
-                return res.json({success: false, message: `Stripe error: ${stripeError.message}`});
+                return res.json({
+                    success: false, 
+                    message: `Stripe error: ${stripeError.message}`,
+                    errorType: stripeError.type,
+                    errorCode: stripeError.code
+                });
             }
+        } else {
+            console.log("[checkPaymentStatus] No payment link found for booking:", booking._id);
         }
 
         res.json({success: true, isPaid: booking.isPaid, booking});

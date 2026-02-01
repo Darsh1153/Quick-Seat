@@ -179,22 +179,30 @@ const MyBookings = () => {
                       onClick={async () => {
                         try {
                           const token = await getToken();
+                          console.log("[MyBookings] Checking payment for booking:", booking._id);
                           const paymentData = await apiRequest(`/api/booking/check-payment/${booking._id}`, {
                             method: 'GET',
                           }, token);
                           
+                          console.log("[MyBookings] Payment check response:", paymentData);
+                          
                           if (paymentData.success && paymentData.updated) {
-                            toast.success("Payment confirmed!");
-                            getMyBooking();
+                            toast.success("Payment confirmed! Status updated.");
+                            setTimeout(() => getMyBooking(), 500);
                           } else if (paymentData.success && paymentData.isPaid) {
                             toast.success("Payment already confirmed!");
-                            getMyBooking();
+                            setTimeout(() => getMyBooking(), 500);
+                          } else if (paymentData.success === false) {
+                            toast.error(paymentData.message || "Failed to check payment status");
                           } else {
-                            toast.error("Payment not confirmed yet. Please complete the payment.");
+                            const statusMsg = paymentData.paymentStatus 
+                              ? `Payment status: ${paymentData.paymentStatus}` 
+                              : "Payment not confirmed yet. Please complete the payment.";
+                            toast.error(statusMsg);
                           }
                         } catch (error) {
-                          console.error("Error checking payment:", error);
-                          toast.error("Failed to check payment status");
+                          console.error("[MyBookings] Error checking payment:", error);
+                          toast.error(error.message || "Failed to check payment status");
                         }
                       }}
                       className='bg-gray-600 hover:bg-gray-700 px-4 py-1.5 mb-3
