@@ -171,8 +171,43 @@ const MyBookings = () => {
             <div className='flex flex-col md:items-end md:text-right justify-between p-4'>
               <div className='flex items-center gap-4'>
                 <p className='text-2xl font-semibold mb-3'>{currency}{booking.amount}</p>
-                {!booking.isPaid && <Link to={booking.paymentLink} className='bg-primmary px-4 py-1.5 mb-3
-                text-sm rounded-full font-medium cursor-pointer'>Pay Now</Link>}
+                {!booking.isPaid ? (
+                  <>
+                    <Link to={booking.paymentLink} className='bg-primmary px-4 py-1.5 mb-3
+                    text-sm rounded-full font-medium cursor-pointer'>Pay Now</Link>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const token = await getToken();
+                          const paymentData = await apiRequest(`/api/booking/check-payment/${booking._id}`, {
+                            method: 'GET',
+                          }, token);
+                          
+                          if (paymentData.success && paymentData.updated) {
+                            toast.success("Payment confirmed!");
+                            getMyBooking();
+                          } else if (paymentData.success && paymentData.isPaid) {
+                            toast.success("Payment already confirmed!");
+                            getMyBooking();
+                          } else {
+                            toast.error("Payment not confirmed yet. Please complete the payment.");
+                          }
+                        } catch (error) {
+                          console.error("Error checking payment:", error);
+                          toast.error("Failed to check payment status");
+                        }
+                      }}
+                      className='bg-gray-600 hover:bg-gray-700 px-4 py-1.5 mb-3
+                      text-sm rounded-full font-medium cursor-pointer'
+                    >
+                      Check Payment
+                    </button>
+                  </>
+                ) : (
+                  <span className='bg-green-600 px-4 py-1.5 mb-3 text-sm rounded-full font-medium'>
+                    Paid
+                  </span>
+                )}
               </div>
               <div className='text-sm'>
                   <p><span className='text-gray-400'>Total Tickets:</span>{booking.bookedSeats.length}</p>
