@@ -51,6 +51,25 @@ const MyBookings = () => {
     };
   }, [user]);
 
+  // Poll for payment status updates every 5 seconds if there are unpaid bookings
+  useEffect(() => {
+    if (!user || !bookings) return;
+
+    const hasUnpaidBookings = bookings.some(booking => !booking.isPaid);
+    if (!hasUnpaidBookings) return;
+
+    console.log("[MyBookings] Starting payment status polling");
+    const pollInterval = setInterval(() => {
+      console.log("[MyBookings] Polling for payment status updates");
+      getMyBooking();
+    }, 5000);
+
+    return () => {
+      console.log("[MyBookings] Stopping payment status polling");
+      clearInterval(pollInterval);
+    };
+  }, [user, bookings]);
+
   const getMyBooking = async () => {
     if (!user) {
       console.log("[MyBookings] No user, skipping fetch");
@@ -101,7 +120,15 @@ const MyBookings = () => {
 
   return (
     <div className='px-6 md:px-16 lg:px-36 pt-30 md:pt-40 min-h-[80vh]'>
-      <h1 className='text-lg font-semibold mb-4'>My Bookings</h1>
+      <div className='flex justify-between items-center mb-4'>
+        <h1 className='text-lg font-semibold'>My Bookings</h1>
+        <button 
+          onClick={getMyBooking}
+          className='text-sm text-gray-400 hover:text-white transition'
+        >
+          Refresh
+        </button>
+      </div>
       
       {!bookings || bookings.length === 0 ? (
         <div className='text-center py-10'>
