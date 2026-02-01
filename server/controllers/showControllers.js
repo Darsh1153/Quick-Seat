@@ -104,12 +104,23 @@ export const addShow = async (req, res) => {
 // API to get all upcoming show with unique
 export const getShows = async (req, res) => {
     try {
-        const movies = await Show.find({showDateTime: {$gte: new Date()}}).populate("movie").sort({ showDateTime: 1 });
+        const shows = await Show.find({showDateTime: {$gte: new Date()}}).populate("movie").sort({ showDateTime: 1 });
 
-        // filter unique shows
-        const uniqueShows = new Set(movies.map(show => show.movie));
-        res.json({ success: true, shows: Array.from(uniqueShows) });
+        // Filter unique movies by _id
+        const uniqueMovieMap = new Map();
+        shows.forEach(show => {
+            if (show.movie && show.movie._id) {
+                const movieId = show.movie._id.toString();
+                if (!uniqueMovieMap.has(movieId)) {
+                    uniqueMovieMap.set(movieId, show.movie);
+                }
+            }
+        });
+
+        const uniqueShows = Array.from(uniqueMovieMap.values());
+        res.json({ success: true, shows: uniqueShows });
     } catch (err) {
+        console.error("Error fetching shows:", err);
         res.json({ success: false, message: err.message });
     }
 }
