@@ -2,6 +2,8 @@ import User from "../models/User.js"
 import { Inngest } from "inngest";
 import connectDB from "../configs/db.js";
 import mongoose from "mongoose";
+import Booking from "../models/Booking.js";
+import Show from "../models/Show.js";
 
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
@@ -182,4 +184,88 @@ const syncUserUpdation = inngest.createFunction(
     }
 )
 
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation];
+
+// Inngest function to cancel booking and release seats of show after 10 minutes of booking created if payment is not made.
+const releaseSeatsAndDeleteBooking = inngest.createFunction(
+    {id: 'release-seats-and-delete-booking'},
+    {event: "app/checkpayment"},
+    async ({event, step}) => {
+        return await step.run('wait-and-check-payment', async () => {
+            // Ensure database connection
+            await ensureDBConnection();
+            
+            const bookingId = event.data.bookingId;
+            console.log('[releaseSeatsAndDeleteBooking] Checking booking after 10 minutes:', bookingId);
+            
+            if (!bookingId) {
+                console.error('[releaseSeatsAndDeleteBooking] No bookingId provided in event data');
+                return { success: false, message: 'No bookingId provided' };
+            }
+
+            // Wait for 10 minutes
+            const tenMinutesInSeconds = 10 * 60;
+            await step.sleep("wait-for-10-minutes", tenMinutesInSeconds);
+            
+            return await step.run('check-payment-status-and-release', async () => {
+                // Re-check database connection after sleep
+                await ensureDBConnection();
+                
+                // Find the booking again (it might have been deleted or paid)
+                const booking = await Booking.findById(bookingId);
+                
+                if (!booking) {
+                    console.log('[releaseSeatsAndDeleteBooking] Booking not found (may have been deleted or paid):', bookingId);
+                    return { success: true, message: 'Booking not found - may have been deleted or paid' };
+                }
+
+                console.log('[releaseSeatsAndDeleteBooking] Booking found, isPaid:', booking.isPaid);
+
+                // If payment is not made, release seats and delete booking
+                if (!booking.isPaid) {
+                    console.log('[releaseSeatsAndDeleteBooking] Payment not made, releasing seats and deleting booking');
+                    
+                    const show = await Show.findById(booking.show);
+                    
+                    if (!show) {
+                        console.error('[releaseSeatsAndDeleteBooking] Show not found:', booking.show);
+                        // Still delete the booking even if show is not found
+                        await Booking.findByIdAndDelete(booking._id);
+                        return { success: false, message: 'Show not found, booking deleted' };
+                    }
+
+                    // Release the booked seats
+                    if (show.occupiedSeats && booking.bookedSeats && Array.isArray(booking.bookedSeats)) {
+                        booking.bookedSeats.forEach((seat) => {
+                            if (show.occupiedSeats[seat]) {
+                                delete show.occupiedSeats[seat];
+                                console.log('[releaseSeatsAndDeleteBooking] Released seat:', seat);
+                            }
+                        });
+                        show.markModified('occupiedSeats');
+                        await show.save();
+                        console.log('[releaseSeatsAndDeleteBooking] Seats released for show:', booking.show);
+                    }
+
+                    // Delete the booking
+                    await Booking.findByIdAndDelete(booking._id);
+                    console.log('[releaseSeatsAndDeleteBooking] Booking deleted:', bookingId);
+                    
+                    return { 
+                        success: true, 
+                        message: 'Seats released and booking deleted due to non-payment',
+                        bookingId: bookingId 
+                    };
+                } else {
+                    console.log('[releaseSeatsAndDeleteBooking] Payment was made, keeping booking:', bookingId);
+                    return { 
+                        success: true, 
+                        message: 'Payment was made, booking kept',
+                        bookingId: bookingId 
+                    };
+                }
+            });
+        });
+    }
+)
+
+export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, releaseSeatsAndDeleteBooking];

@@ -1,6 +1,7 @@
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import Stripe from "stripe";
+import { inngest } from "../inngest/index.js";
 
 const checkSeatsAvailability = async (showId, selectedSeats) => {
     try {
@@ -134,6 +135,22 @@ export const createBooking = async (req, res) => {
 
         booking.paymentLink = session.url
         await booking.save()
+
+        // Run inngest function to check payment status after 10 minutes
+        // This will automatically release seats if payment is not made within 10 minutes
+        try {
+            await inngest.send({
+                name: "app/checkpayment",
+                data: {
+                    bookingId: booking._id.toString(),
+                }
+            });
+            console.log("[createBooking] Inngest event sent for payment check:", booking._id);
+        } catch (inngestError) {
+            // Don't fail the booking creation if Inngest fails
+            console.error("[createBooking] Failed to send Inngest event:", inngestError);
+            // Continue - booking is still created successfully
+        }
 
         res.json({success: true, url: session.url});
     } catch (err) {
