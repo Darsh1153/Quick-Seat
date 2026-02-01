@@ -96,6 +96,26 @@ const MyBookings = () => {
         const bookingsList = data.bookings || [];
         console.log("[MyBookings] Setting bookings:", bookingsList.length);
         setBookings(bookingsList);
+        
+        // Check payment status for unpaid bookings
+        bookingsList.forEach(async (booking) => {
+          if (!booking.isPaid && booking._id) {
+            try {
+              console.log("[MyBookings] Checking payment status for booking:", booking._id);
+              const paymentData = await apiRequest(`/api/booking/check-payment/${booking._id}`, {
+                method: 'GET',
+              }, token);
+              
+              if (paymentData.success && paymentData.updated) {
+                console.log("[MyBookings] Payment status updated for booking:", booking._id);
+                // Refresh bookings to get updated status
+                setTimeout(() => getMyBooking(), 1000);
+              }
+            } catch (error) {
+              console.error("[MyBookings] Error checking payment status:", error);
+            }
+          }
+        });
       } else {
         console.error("[MyBookings] API returned error:", data.message);
         toast.error(data.message || "Failed to fetch bookings");

@@ -18,6 +18,14 @@ export const stripeWebhooks = async (req, res) => {
             case "checkout.session.completed": {
                 const session = event.data.object;
                 console.log("[stripeWebhooks] Checkout session completed:", session.id);
+                console.log("[stripeWebhooks] Session payment status:", session.payment_status);
+                console.log("[stripeWebhooks] Session metadata:", session.metadata);
+                
+                // Only mark as paid if payment was successful
+                if (session.payment_status !== 'paid') {
+                    console.log("[stripeWebhooks] Payment not completed, status:", session.payment_status);
+                    return res.json({ received: true, message: "Payment not completed yet" });
+                }
                 
                 const bookingId = session.metadata?.bookingId;
                 
@@ -38,7 +46,7 @@ export const stripeWebhooks = async (req, res) => {
                     return res.status(404).json({ error: "Booking not found" });
                 }
 
-                console.log("[stripeWebhooks] Booking updated successfully:", bookingId);
+                console.log("[stripeWebhooks] Booking updated successfully:", bookingId, "isPaid:", updatedBooking.isPaid);
                 break;
             }
             case "payment_intent.succeeded": {
