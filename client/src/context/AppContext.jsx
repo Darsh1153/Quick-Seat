@@ -87,16 +87,30 @@ export const AppProvider = ({ children }) => {
 
     const fetchShow = async () => {
         try {
+            console.log("[AppContext] Fetching shows from /api/show/all");
             const data = await apiRequest("/api/show/all", {
                 method: 'GET',
             });
+            console.log("[AppContext] Shows API response:", {
+                success: data?.success,
+                showsCount: data?.shows?.length,
+                shows: data?.shows
+            });
             if(data.success){
-                setShows(data.shows);
+                setShows(data.shows || []);
             }else{
-                toast(data.message);
+                console.error("[AppContext] Shows API returned error:", data.message);
+                toast.error(data.message || "Failed to fetch shows");
+                setShows([]);
             }
         } catch (err) {
-            console.error("Error fetching shows:", err);
+            console.error("[AppContext] Error fetching shows:", {
+                error: err,
+                errorMessage: err?.message,
+                errorStack: err?.stack
+            });
+            toast.error(err.message || "Failed to fetch shows. Make sure the backend is running.");
+            setShows([]);
         }
     }
 
