@@ -1,10 +1,13 @@
 import nodemailer from "nodemailer";
 
-// Create a transporter using Brevo SMTP
+// Determine which email service to use based on environment variables
+const isGmail = process.env.EMAIL_USER && process.env.EMAIL_USER.includes('@gmail.com');
+
+// Create a transporter using either Gmail or Brevo SMTP
 const transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false, // Use true for port 465, false for port 587
+  host: isGmail ? "smtp.gmail.com" : "smtp-relay.brevo.com",
+  port: isGmail ? 465 : 587,
+  secure: isGmail ? true : false, // true for Gmail (465), false for Brevo (587)
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,

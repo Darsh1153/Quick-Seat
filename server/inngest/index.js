@@ -285,17 +285,54 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                 const booking = await Booking.findById(bookingId).populate({
                     path: 'show',
                     populate: { path: "movie", model: "movie" }
-                }).populate("user");
+                });
 
                 if (!booking) {
                     console.error('[sendBookingConfirmationEmail] Booking not found:', bookingId);
                     throw new Error('Booking not found');
                 }
 
-                if (!booking.user || !booking.user.email) {
+                console.log('[sendBookingConfirmationEmail] Booking found, userId:', booking.user);
+
+                // Get user details from MongoDB User model (synced from Clerk)
+                let userEmail, userName;
+                try {
+                    const user = await User.findById(booking.user);
+                    
+                    if (!user) {
+                        console.error('[sendBookingConfirmationEmail] User not found in database:', booking.user);
+                        throw new Error(`User not found in database: ${booking.user}`);
+                    }
+                    
+                    userEmail = user.email;
+                    userName = user.name;
+                    
+                    console.log('[sendBookingConfirmationEmail] User fetched from database:', {
+                        userId: booking.user,
+                        email: userEmail,
+                        name: userName
+                    });
+                } catch (userError) {
+                    console.error('[sendBookingConfirmationEmail] Error fetching user from database:', {
+                        error: userError.message,
+                        userId: booking.user
+                    });
+                    throw new Error(`Failed to fetch user from database: ${userError.message}`);
+                }
+
+                if (!userEmail) {
                     console.error('[sendBookingConfirmationEmail] User email not found for booking:', bookingId);
                     throw new Error('User email not found');
                 }
+
+                console.log('[sendBookingConfirmationEmail] Booking details:', {
+                    bookingId: booking._id,
+                    userEmail: userEmail,
+                    userName: userName,
+                    movieTitle: booking.show.movie.title,
+                    seats: booking.bookedSeats,
+                    amount: booking.amount
+                });
 
                 // Format date and time
                 const showDate = new Date(booking.show.showDateTime).toLocaleDateString('en-US', {
@@ -310,7 +347,7 @@ const sendBookingConfirmationEmail = inngest.createFunction(
                 });
 
                 const emailBody = `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-  <h2>Hi ${booking.user.name || 'there'},</h2>
+  <h2>Hi ${userName || 'there'},</h2>
 
   <p>
     Your booking for 
@@ -340,16 +377,47 @@ const sendBookingConfirmationEmail = inngest.createFunction(
   </p>
 </div>`;
 
-                await sendEmail({
-                    to: booking.user.email,
+                // Verify email configuration
+                if (!process.env.SENDER_EMAIL) {
+                    console.error('[sendBookingConfirmationEmail] ⚠️  SENDER_EMAIL not configured in environment variables!');
+                    throw new Error('SENDER_EMAIL environment variable is not set');
+                }
+                
+                if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+                    console.error('[sendBookingConfirmationEmail] ⚠️  EMAIL_USER or EMAIL_PASS not configured!');
+                    throw new Error('EMAIL_USER or EMAIL_PASS environment variables are not set');
+                }
+
+                console.log('[sendBookingConfirmationEmail] ✉️  Attempting to send email...');
+                console.log('[sendBookingConfirmationEmail] Email configuration:', {
+                    to: userEmail,
+                    from: process.env.SENDER_EMAIL,
+                    subject: `Booking Confirmed: ${booking.show.movie.title}`,
+                    smtpUser: process.env.EMAIL_USER
+                });
+
+                const emailResult = await sendEmail({
+                    to: userEmail,
                     subject: `Booking Confirmed: ${booking.show.movie.title}`,
                     body: emailBody
                 });
 
-                console.log('[sendBookingConfirmationEmail] Email sent successfully to:', booking.user.email);
-                return { success: true, email: booking.user.email };
+                console.log('[sendBookingConfirmationEmail] ✅ Email sent successfully!', {
+                    to: userEmail,
+                    messageId: emailResult.messageId,
+                    response: emailResult.response
+                });
+                
+                return { success: true, email: userEmail, messageId: emailResult.messageId };
             } catch (error) {
-                console.error('[sendBookingConfirmationEmail] Error:', error);
+                console.error('[sendBookingConfirmationEmail] ❌ Error sending email:', {
+                    error: error.message,
+                    code: error.code,
+                    command: error.command,
+                    stack: error.stack,
+                    responseCode: error.responseCode,
+                    response: error.response
+                });
                 throw error;
             }
         });
