@@ -5,6 +5,7 @@ import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Show from "../models/Show.js";
 import sendEmail from "../configs/nodeMailer.js";
+import { clerkClient } from "@clerk/express";
 
 export const inngest = new Inngest({ id: "movie-ticket-booking" });
 
@@ -294,30 +295,60 @@ const sendBookingConfirmationEmail = inngest.createFunction(
 
                 console.log('[sendBookingConfirmationEmail] Booking found, userId:', booking.user);
 
-                // Get user details from MongoDB User model (synced from Clerk)
+                // Get user details - try MongoDB first, fallback to Clerk if not found
                 let userEmail, userName;
                 try {
-                    const user = await User.findById(booking.user);
+                    // Try MongoDB first (faster)
+                    let user = await User.findById(booking.user);
                     
                     if (!user) {
-                        console.error('[sendBookingConfirmationEmail] User not found in database:', booking.user);
-                        throw new Error(`User not found in database: ${booking.user}`);
+                        console.log('[sendBookingConfirmationEmail] User not in MongoDB, fetching from Clerk:', booking.user);
+                        
+                        // Fallback to Clerk if user not synced to MongoDB yet
+                        try {
+                            const clerkUser = await clerkClient.users.getUser(booking.user);
+                            userEmail = clerkUser.emailAddresses?.[0]?.emailAddress;
+                            userName = clerkUser.firstName ? `${clerkUser.firstName} ${clerkUser.lastName || ''}`.trim() : clerkUser.username;
+                            
+                            console.log('[sendBookingConfirmationEmail] User fetched from Clerk:', {
+                                userId: booking.user,
+                                email: userEmail,
+                                name: userName
+                            });
+                            
+                            // Create user in MongoDB for next time
+                            try {
+                                await User.create({
+                                    _id: booking.user,
+                                    email: userEmail,
+                                    name: userName,
+                                    image: clerkUser.imageUrl || ''
+                                });
+                                console.log('[sendBookingConfirmationEmail] User synced to MongoDB');
+                            } catch (createError) {
+                                console.log('[sendBookingConfirmationEmail] Could not sync user to MongoDB (may already exist):', createError.message);
+                            }
+                        } catch (clerkError) {
+                            console.error('[sendBookingConfirmationEmail] Error fetching from Clerk:', clerkError.message);
+                            throw new Error(`User not found in database or Clerk: ${booking.user}`);
+                        }
+                    } else {
+                        // User found in MongoDB
+                        userEmail = user.email;
+                        userName = user.name;
+                        
+                        console.log('[sendBookingConfirmationEmail] User fetched from MongoDB:', {
+                            userId: booking.user,
+                            email: userEmail,
+                            name: userName
+                        });
                     }
-                    
-                    userEmail = user.email;
-                    userName = user.name;
-                    
-                    console.log('[sendBookingConfirmationEmail] User fetched from database:', {
-                        userId: booking.user,
-                        email: userEmail,
-                        name: userName
-                    });
                 } catch (userError) {
-                    console.error('[sendBookingConfirmationEmail] Error fetching user from database:', {
+                    console.error('[sendBookingConfirmationEmail] Error fetching user:', {
                         error: userError.message,
                         userId: booking.user
                     });
-                    throw new Error(`Failed to fetch user from database: ${userError.message}`);
+                    throw new Error(`Failed to fetch user: ${userError.message}`);
                 }
 
                 if (!userEmail) {
