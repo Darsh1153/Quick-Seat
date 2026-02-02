@@ -458,49 +458,53 @@ const sendBookingConfirmationEmail = inngest.createFunction(
 // Inngest function to send reminders
 const sendShowReminders = inngest.createFunction(
     { id: 'send-show-reminders' },
-    { cron: '0 *8/ * * *' }, // Every 8 hours
+    { cron: '0 */8 * * *' }, // Every 8 hours (fixed typo: *8/ should be */8)
     async ({ step }) => {
         const now = new Date();
         const in8Hours = new Date(now.getTime() + 8 * 60 * 60 * 1000);
         const windowStart = new Date(in8Hours.getTime() - 10 * 60 * 1000);
 
         // Prepare reminder tasks
-        const reminderTasks = await step.run
-            ("prepare-reminder-tasks", async () => {
-                const shows = await Show.find({
-                    showTime: { $gte: windowStart, $lte: in8Hours },
-                }).populate('movie');
+        const reminderTasks = await step.run("prepare-reminder-tasks", async () => {
+            await ensureDBConnection();
+            
+            const shows = await Show.find({
+                showDateTime: { $gte: windowStart, $lte: in8Hours },
+            }).populate('movie');
 
-                const task = [];
+            const tasks = []; // Fixed: was 'task', should be 'tasks'
 
-                for (const show of shows) {
-                    if (!show.movie || !show.occupiedSeats) continue;
+            for (const show of shows) {
+                if (!show.movie || !show.occupiedSeats) continue;
 
-                    const userIds = [...new Set(Object.values(show.occupiedSeats))];
-                    if (userIds.length === 0) continue;
+                const userIds = [...new Set(Object.values(show.occupiedSeats))];
+                if (userIds.length === 0) continue;
 
-                    const users = await User.find({ _id: { $in: userIds } }).select("name email");
+                const users = await User.find({ _id: { $in: userIds } }).select("name email");
 
-                    for (const user of users) {
-                        tasks.push({
-                            userEmail: user.email,
-                            userName: user.name,
-                            movieTitle: show.movie.title,
-                            showTime: show.showTime,
-                        })
-                    }
+                for (const user of users) {
+                    tasks.push({
+                        userEmail: user.email,
+                        userName: user.name,
+                        movieTitle: show.movie.title,
+                        showTime: show.showDateTime, // Fixed: showTime should be showDateTime
+                    });
                 }
-                return tasks;
-            })
+            }
+            return tasks;
+        });
+        
         if (reminderTasks.length === 0) {
             return { sent: 0, message: 'No reminders to send.' };
         }
+        
         // Send reminder emails
         const results = await step.run('send-all-reminders', async () => {
             return await Promise.allSettled(
                 reminderTasks.map(task => sendEmail({
                     to: task.userEmail,
-                    subject: `
+                    subject: `Reminder: ${task.movieTitle} starts in 8 hours!`,
+                    body: `
                     <div style="font-family: Arial, sans-serif; padding: 20px;">
                       <h2>Hello ${task.userName},</h2>
                     
@@ -535,10 +539,10 @@ const sendShowReminders = inngest.createFunction(
                       </p>
                     </div>
                     `
-
                 }))
-            )
-        })
+            );
+        });
+        
         const sent = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.length - sent;
 
@@ -546,7 +550,7 @@ const sendShowReminders = inngest.createFunction(
             sent,
             failed,
             message: `${sent} reminder(s) sent, ${failed} failed.`
-        }
+        };
     }
 )
 
@@ -554,24 +558,23 @@ const sendShowReminders = inngest.createFunction(
 const sendNewShowNotifications = inngest.createFunction(
     { id: "send-new-show-notifications" },
     { event: "app/show.added" },
-    async ({ event }) => {
-        const { movieTitle } = event.data;
+    async ({ event, step }) => {
+        return await step.run('send-new-show-notifications', async () => {
+            await ensureDBConnection();
+            
+            const { movieTitle } = event.data;
 
-        const users = await User.find({});
+            const users = await User.find({});
 
-        for (const user of users) {
-            const userEmail = user.email;
-            const userName = user.name;
-
-            const subject = `
+            const body = `
 <div style="font-family: Arial, sans-serif; padding: 20px;">
-  <h2>Hi ${userName},</h2>
+  <h2>Hi there,</h2>
 
   <p>We've just added a new show to our library:</p>
 
   <h3 style="color: #F84565;">"${movieTitle}"</h3>
 
-  <p>Visit our website</p>
+  <p>Visit our website to book your tickets now!</p>
 
   <br />
 
@@ -581,16 +584,21 @@ const sendNewShowNotifications = inngest.createFunction(
   </p>
 </div>
 `;
-            await sendEmail({
-                to: userEmail,
-                subject,
-                body,
-            })
-        }
 
-        return { messge: "Notification sent." }
+            for (const user of users) {
+                try {
+                    await sendEmail({
+                        to: user.email,
+                        subject: `New Show Added: ${movieTitle}`,
+                        body: body,
+                    });
+                } catch (error) {
+                    console.error(`Failed to send email to ${user.email}:`, error);
+                }
+            }
 
-
+            return { message: "Notifications sent.", count: users.length }; // Fixed typo: messge -> message
+        });
     }
 )
 
