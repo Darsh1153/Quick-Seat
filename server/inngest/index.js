@@ -560,11 +560,19 @@ const sendNewShowNotifications = inngest.createFunction(
     { event: "app/show.added" },
     async ({ event, step }) => {
         return await step.run('send-new-show-notifications', async () => {
+            console.log('[sendNewShowNotifications] Event received:', event.data);
             await ensureDBConnection();
             
             const { movieTitle } = event.data;
+            console.log('[sendNewShowNotifications] Movie title:', movieTitle);
 
             const users = await User.find({});
+            console.log('[sendNewShowNotifications] Found users:', users.length);
+
+            if (users.length === 0) {
+                console.log('[sendNewShowNotifications] No users found to notify');
+                return { message: "No users to notify.", count: 0 };
+            }
 
             const body = `
 <div style="font-family: Arial, sans-serif; padding: 20px;">
@@ -585,19 +593,32 @@ const sendNewShowNotifications = inngest.createFunction(
 </div>
 `;
 
+            let successCount = 0;
+            let failCount = 0;
+
             for (const user of users) {
                 try {
+                    console.log(`[sendNewShowNotifications] Sending email to ${user.email}...`);
                     await sendEmail({
                         to: user.email,
                         subject: `New Show Added: ${movieTitle}`,
                         body: body,
                     });
+                    console.log(`[sendNewShowNotifications] ✅ Email sent to ${user.email}`);
+                    successCount++;
                 } catch (error) {
-                    console.error(`Failed to send email to ${user.email}:`, error);
+                    console.error(`[sendNewShowNotifications] ❌ Failed to send email to ${user.email}:`, error);
+                    failCount++;
                 }
             }
 
-            return { message: "Notifications sent.", count: users.length }; // Fixed typo: messge -> message
+            console.log(`[sendNewShowNotifications] Summary: ${successCount} sent, ${failCount} failed`);
+            return { 
+                message: "Notifications sent.", 
+                count: users.length,
+                success: successCount,
+                failed: failCount
+            };
         });
     }
 )

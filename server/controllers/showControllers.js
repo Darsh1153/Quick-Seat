@@ -57,7 +57,7 @@ export const addShow = async (req, res) => {
             const movieDetails = await movieRes.json();
             const castDetails = await creditsRes.json();
 
-            await Movie.create({
+            movie = await Movie.create({
                 _id: movieId,
                 title: movieDetails.title,
                 overview: movieDetails.overview,
@@ -95,11 +95,13 @@ export const addShow = async (req, res) => {
             await Show.insertMany(showToCreate);
         }
 
-        // Trigger inngest event
+        // Trigger inngest event for new show notification
+        console.log('[addShow] Triggering app/show.added event for:', movie.title);
         await inngest.send({
             name: "app/show.added",
             data: { movieTitle: movie.title },
-        })
+        });
+        console.log('[addShow] Inngest event sent successfully');
 
         res.json({ success: true, message: "Show added successfully!" });
     } catch (err) {
