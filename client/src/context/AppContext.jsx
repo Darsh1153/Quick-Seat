@@ -8,6 +8,14 @@ import { apiRequest } from "../lib/api";
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || 'http://localhost:3001';
 axios.defaults.baseURL = API_BASE_URL;
 
+// Debug logging
+console.log('[AppContext] API Configuration:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
+  API_BASE_URL: API_BASE_URL,
+  mode: import.meta.env.MODE
+});
+
 const IMAGE_URL = import.meta.env.VITE_IMAGE_URL;
 
 export const AppContext = createContext();

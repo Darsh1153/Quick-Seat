@@ -1,4 +1,12 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || 'http://localhost:3001';
+
+// Debug logging for production
+console.log('[API Config] Environment variables:', {
+  VITE_API_URL: import.meta.env.VITE_API_URL,
+  VITE_BASE_URL: import.meta.env.VITE_BASE_URL,
+  API_BASE_URL: API_BASE_URL,
+  mode: import.meta.env.MODE
+});
 
 /**
  * Extract JWT token from Clerk token object or string
