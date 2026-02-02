@@ -18,12 +18,12 @@ const AddShows = () => {
   const [addShow, setAddShow] = useState(false);
 
   const [loading, setLoading] = useState(true);
-
+  
   const { getToken, user } = useAppContext();
 
   useEffect(() => {
     if (user) {
-      fetchNowPlayingMovies();
+    fetchNowPlayingMovies();
     }
   }, [user]);
 
@@ -137,7 +137,7 @@ const AddShows = () => {
   return loading ? <h1>Loading...</h1> : (
     <div>
       <Title text1="Add" text2="Shows" />
-
+      
       <p className='mt-10 text-lg font-medium'>Now Playing Movies</p>
 
       <div className='overflow-x-auto pb-4 mt-5'>
@@ -242,13 +242,13 @@ const AddShows = () => {
         </div>
       )}
 
-      <div className="mt-8">
+        <div className="mt-8">
         <button onClick={handleAddShow} disabled={addShow}
-          className={`bg-primmary text-white px-8 py-3 rounded-lg hover:bg-primmary/90 transition-all cursor-pointer font-medium`}
-        >
-          Add Show
-        </button>
-      </div>
+            className={`bg-primmary text-white px-8 py-3 rounded-lg hover:bg-primmary/90 transition-all cursor-pointer font-medium`}
+          >
+            Add Show
+          </button>
+        </div>
 
     </div>
   )

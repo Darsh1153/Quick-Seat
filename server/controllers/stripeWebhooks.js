@@ -20,15 +20,15 @@ export const stripeWebhooks = async (req, res) => {
                 console.log("[stripeWebhooks] Checkout session completed:", session.id);
                 console.log("[stripeWebhooks] Session payment status:", session.payment_status);
                 console.log("[stripeWebhooks] Session metadata:", session.metadata);
-                
+
                 // Only mark as paid if payment was successful
                 if (session.payment_status !== 'paid') {
                     console.log("[stripeWebhooks] Payment not completed, status:", session.payment_status);
                     return res.json({ received: true, message: "Payment not completed yet" });
                 }
-                
+
                 const bookingId = session.metadata?.bookingId;
-                
+
                 if (!bookingId) {
                     console.error("[stripeWebhooks] No bookingId found in session metadata");
                     return res.status(400).json({ error: "No bookingId in session metadata" });
@@ -36,7 +36,7 @@ export const stripeWebhooks = async (req, res) => {
 
                 console.log("[stripeWebhooks] Updating booking:", bookingId);
                 const updatedBooking = await Booking.findByIdAndUpdate(
-                    bookingId, 
+                    bookingId,
                     { isPaid: true, paymentLink: "" },
                     { new: true }
                 );
@@ -53,7 +53,7 @@ export const stripeWebhooks = async (req, res) => {
                 // Handle payment_intent.succeeded as fallback
                 const paymentIntent = event.data.object;
                 console.log("[stripeWebhooks] Payment intent succeeded:", paymentIntent.id);
-                
+
                 // Try to find the checkout session
                 const sessionList = await stripeInstance.checkout.sessions.list({
                     payment_intent: paymentIntent.id,
@@ -61,19 +61,27 @@ export const stripeWebhooks = async (req, res) => {
                 });
 
                 if (sessionList.data.length > 0) {
-                const session = sessionList.data[0];
+                    const session = sessionList.data[0];
                     const bookingId = session.metadata?.bookingId;
 
                     if (bookingId) {
                         console.log("[stripeWebhooks] Updating booking from payment_intent:", bookingId);
                         await Booking.findByIdAndUpdate(
-                            bookingId, 
+                            bookingId,
                             { isPaid: true, paymentLink: "" },
                             { new: true }
                         );
+
+                        // Send Confirmation Email
+                        await inngest.send({
+                            name: 'app/show.booked',
+                            data: { bookingId }
+                        })
+
+
+                        break;
                     }
                 }
-                break;
             }
             default:
                 console.log(`[stripeWebhooks] Unhandled event type: ${event.type}`);

@@ -87,7 +87,7 @@ export const addShow = async (req, res) => {
                 occupiedSeats: {},
               });
             });
-        });
+          });
           
 
         if (showToCreate.length) {
@@ -108,7 +108,7 @@ export const getShows = async (req, res) => {
         console.log("[getShows] Fetching shows with date >= ", currentDate);
         
         const shows = await Show.find({showDateTime: {$gte: currentDate}}).populate("movie").sort({ showDateTime: 1 });
-        
+
         console.log("[getShows] Found shows:", shows.length);
 
         // Filter unique movies by _id

@@ -12,7 +12,7 @@ const Movies = () => {
       <div className='flex flex-wrap max-sm:justify-center gap-2'>
         {shows && shows.length > 0 ? (
           shows.map((movie) => (
-            <MovieCard key={movie._id} show={movie} imageUrl={IMAGE_URL} />
+          <MovieCard key={movie._id} show={movie} imageUrl={IMAGE_URL} />
           ))
         ) : (
           <div className='text-center py-10 w-full'>
