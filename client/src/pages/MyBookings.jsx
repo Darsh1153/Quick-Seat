@@ -25,51 +25,6 @@ const MyBookings = () => {
     }
   }, [user]);
 
-  // Refresh bookings when component comes into focus (e.g., after navigation from booking)
-  useEffect(() => {
-    const handleFocus = () => {
-      console.log("[MyBookings] Window focused, refreshing bookings");
-      if (user) {
-        getMyBooking();
-      }
-    };
-    
-    // Also refresh when page becomes visible
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && user) {
-        console.log("[MyBookings] Page visible, refreshing bookings");
-        getMyBooking();
-      }
-    };
-    
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user]);
-
-  // Poll for payment status updates every 5 seconds if there are unpaid bookings
-  useEffect(() => {
-    if (!user || !bookings) return;
-
-    const hasUnpaidBookings = bookings.some(booking => !booking.isPaid);
-    if (!hasUnpaidBookings) return;
-
-    console.log("[MyBookings] Starting payment status polling");
-    const pollInterval = setInterval(() => {
-      console.log("[MyBookings] Polling for payment status updates");
-      getMyBooking();
-    }, 5000);
-
-    return () => {
-      console.log("[MyBookings] Stopping payment status polling");
-      clearInterval(pollInterval);
-    };
-  }, [user, bookings]);
-
   const getMyBooking = async () => {
     if (!user) {
       console.log("[MyBookings] No user, skipping fetch");
@@ -91,37 +46,17 @@ const MyBookings = () => {
         bookingsCount: data?.bookings?.length,
         bookings: data?.bookings
       });
-      
+
       if(data.success) {
         const bookingsList = data.bookings || [];
         console.log("[MyBookings] Setting bookings:", bookingsList.length);
         setBookings(bookingsList);
-        
-        // Check payment status for unpaid bookings
-        bookingsList.forEach(async (booking) => {
-          if (!booking.isPaid && booking._id) {
-            try {
-              console.log("[MyBookings] Checking payment status for booking:", booking._id);
-              const paymentData = await apiRequest(`/api/booking/check-payment/${booking._id}`, {
-                method: 'GET',
-              }, token);
-              
-              if (paymentData.success && paymentData.updated) {
-                console.log("[MyBookings] Payment status updated for booking:", booking._id);
-                // Refresh bookings to get updated status
-                setTimeout(() => getMyBooking(), 1000);
-              }
-            } catch (error) {
-              console.error("[MyBookings] Error checking payment status:", error);
-            }
-          }
-        });
       } else {
         console.error("[MyBookings] API returned error:", data.message);
         toast.error(data.message || "Failed to fetch bookings");
         setBookings([]);
-      }
-    } catch (error) {
+    }
+  } catch (error) {
       console.error("[MyBookings] Error fetching bookings:", {
         error,
         errorMessage: error?.message,
@@ -129,9 +64,9 @@ const MyBookings = () => {
       });
       toast.error(error.message || "Failed to fetch bookings");
       setBookings([]);
-    } finally {
-      setIsLoading(false);
-    }
+  } finally {
+    setIsLoading(false);
+  }
   }
 
   if (isLoading) {
