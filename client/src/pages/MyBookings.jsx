@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Loading from "../components/Loading";
 import { dummyBookingData } from "../assets/assets";
 import formatTime from "../lib/formatTime";
@@ -6,7 +6,7 @@ import { dateFormat } from '../lib/dateFormat';
 import { useAppContext } from '../context/AppContext';
 import { apiRequest } from '../lib/api';
 import toast from 'react-hot-toast';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useLocation } from 'react-router-dom';
 
 const MyBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY;
@@ -15,9 +15,56 @@ const MyBookings = () => {
 
   const [bookings, setBookings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const hasHandledPayment = useRef(false);
 
+  // Handle payment success/cancel on mount
   useEffect(() => {
-    console.log("[MyBookings] Component mounted/updated, user:", user?.id);
+    if (!user || hasHandledPayment.current) return;
+    
+    const paymentSuccess = searchParams.get('payment_success');
+    const paymentCancelled = searchParams.get('payment_cancelled');
+    
+    if (paymentSuccess === 'true') {
+      hasHandledPayment.current = true;
+      toast.success('Payment successful! Refreshing your bookings...');
+      
+      // Clean URL
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('payment_success');
+      setSearchParams(newParams, { replace: true });
+      
+      // Poll for updates
+      let pollCount = 0;
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        console.log(`[MyBookings] Polling attempt ${pollCount}/5`);
+        await getMyBooking();
+        
+        if (pollCount >= 5) {
+          console.log('[MyBookings] Polling complete');
+          clearInterval(pollInterval);
+        }
+      }, 1500);
+      
+      return () => {
+        console.log('[MyBookings] Cleanup: clearing poll interval');
+        clearInterval(pollInterval);
+      };
+    }
+    
+    if (paymentCancelled === 'true') {
+      toast.error('Payment was cancelled. You can try again by clicking "Pay Now".');
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('payment_cancelled');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [user, location.search]);
+
+  // Fetch bookings on mount
+  useEffect(() => {
+    console.log("[MyBookings] Component mounted, user:", user?.id);
     if(user) {
       getMyBooking();
     } else {
@@ -77,12 +124,6 @@ const MyBookings = () => {
     <div className='px-6 md:px-16 lg:px-36 pt-30 md:pt-40 min-h-[80vh]'>
       <div className='flex justify-between items-center mb-4'>
         <h1 className='text-lg font-semibold'>My Bookings</h1>
-        <button 
-          onClick={getMyBooking}
-          className='text-sm text-gray-400 hover:text-white transition'
-        >
-          Refresh
-        </button>
       </div>
       
       {!bookings || bookings.length === 0 ? (
@@ -107,45 +148,12 @@ const MyBookings = () => {
               <div className='flex items-center gap-4'>
                 <p className='text-2xl font-semibold mb-3'>{currency}{booking.amount}</p>
                 {!booking.isPaid ? (
-                  <>
-                    <Link to={booking.paymentLink} className='bg-primmary px-4 py-1.5 mb-3
-                    text-sm rounded-full font-medium cursor-pointer'>Pay Now</Link>
-                    <button 
-                      onClick={async () => {
-                        try {
-                          const token = await getToken();
-                          console.log("[MyBookings] Checking payment for booking:", booking._id);
-                          const paymentData = await apiRequest(`/api/booking/check-payment/${booking._id}`, {
-                            method: 'GET',
-                          }, token);
-                          
-                          console.log("[MyBookings] Payment check response:", paymentData);
-                          
-                          if (paymentData.success && paymentData.updated) {
-                            toast.success("Payment confirmed! Status updated.");
-                            setTimeout(() => getMyBooking(), 500);
-                          } else if (paymentData.success && paymentData.isPaid) {
-                            toast.success("Payment already confirmed!");
-                            setTimeout(() => getMyBooking(), 500);
-                          } else if (paymentData.success === false) {
-                            toast.error(paymentData.message || "Failed to check payment status");
-                          } else {
-                            const statusMsg = paymentData.paymentStatus 
-                              ? `Payment status: ${paymentData.paymentStatus}` 
-                              : "Payment not confirmed yet. Please complete the payment.";
-                            toast.error(statusMsg);
-                          }
-                        } catch (error) {
-                          console.error("[MyBookings] Error checking payment:", error);
-                          toast.error(error.message || "Failed to check payment status");
-                        }
-                      }}
-                      className='bg-gray-600 hover:bg-gray-700 px-4 py-1.5 mb-3
-                      text-sm rounded-full font-medium cursor-pointer'
-                    >
-                      Check Payment
-                    </button>
-                  </>
+                  <Link 
+                    to={booking.paymentLink} 
+                    className='bg-primmary px-4 py-1.5 mb-3 text-sm rounded-full font-medium cursor-pointer'
+                  >
+                    Pay Now
+                  </Link>
                 ) : (
                   <span className='bg-green-600 px-4 py-1.5 mb-3 text-sm rounded-full font-medium'>
                     Paid

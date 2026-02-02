@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import Booking from "../models/Booking.js";
+import { inngest } from "../inngest/index.js";
 
 export const stripeWebhooks = async (req, res) => {
     const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -47,6 +48,23 @@ export const stripeWebhooks = async (req, res) => {
                 }
 
                 console.log("[stripeWebhooks] Booking updated successfully:", bookingId, "isPaid:", updatedBooking.isPaid);
+
+                // Trigger Inngest to send confirmation email
+                try {
+                    await inngest.send({
+                        name: "app/show.booked",
+                        data: { bookingId },
+                    });
+                    console.log("[stripeWebhooks] Inngest event sent for booking confirmation email:", bookingId);
+                } catch (inngestError) {
+                    console.error("[stripeWebhooks] Failed to send Inngest booking email event:", {
+                        bookingId,
+                        error: inngestError,
+                        message: inngestError.message,
+                    });
+                    // Do not fail the webhook because of email issues
+                }
+
                 break;
             }
             case "payment_intent.succeeded": {

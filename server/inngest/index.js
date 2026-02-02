@@ -274,35 +274,60 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     { id: 'send-booking-confirmation-email' },
     { event: 'app/show.booked' },
     async ({ event, step }) => {
-        const { bookingId } = event.data;
+        return await step.run('send-confirmation-email', async () => {
+            try {
+                // Ensure database connection
+                await ensureDBConnection();
+                
+                const { bookingId } = event.data;
+                console.log('[sendBookingConfirmationEmail] Processing booking:', bookingId);
 
-        const booking = await Booking.findById(bookingId).populate({
-            path: 'show',
-            populate: { path: "movie", model: "movie" }
-        }).populate("user")
+                const booking = await Booking.findById(bookingId).populate({
+                    path: 'show',
+                    populate: { path: "movie", model: "movie" }
+                }).populate("user");
 
-        await sendEmail({
-            to: booking.user.email,
-            subject: `Payment confirmation "${booking.show.movie.title}" booked!`,
-            body: `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-  <h2>Hi {{USER_NAME}},</h2>
+                if (!booking) {
+                    console.error('[sendBookingConfirmationEmail] Booking not found:', bookingId);
+                    throw new Error('Booking not found');
+                }
+
+                if (!booking.user || !booking.user.email) {
+                    console.error('[sendBookingConfirmationEmail] User email not found for booking:', bookingId);
+                    throw new Error('User email not found');
+                }
+
+                // Format date and time
+                const showDate = new Date(booking.show.showDateTime).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                });
+                const showTime = new Date(booking.show.showDateTime).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const emailBody = `<div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+  <h2>Hi ${booking.user.name || 'there'},</h2>
 
   <p>
     Your booking for 
     <strong style="color: #F84565;">
-      {{MOVIE_TITLE}}
+      ${booking.show.movie.title}
     </strong> 
     has been <strong>successfully confirmed</strong>.
   </p>
 
   <p>
-    <strong>Date:</strong> {{SHOW_DATE}} <br />
-    <strong>Time:</strong> {{SHOW_TIME}}
+    <strong>Date:</strong> ${showDate} <br />
+    <strong>Time:</strong> ${showTime}
   </p>
 
   <p>
-    <strong>Seats:</strong> {{SEAT_NUMBERS}} <br />
-    <strong>Total Amount:</strong> ₹{{AMOUNT}}
+    <strong>Seats:</strong> ${booking.bookedSeats.join(', ')} <br />
+    <strong>Total Amount:</strong> ₹${booking.amount}
   </p>
 
   <p style="margin-top: 16px;">
@@ -313,9 +338,21 @@ const sendBookingConfirmationEmail = inngest.createFunction(
     Thanks for booking with us.<br />
     <strong>— QuickShow Team</strong>
   </p>
-</div>
-`
-        })
+</div>`;
+
+                await sendEmail({
+                    to: booking.user.email,
+                    subject: `Booking Confirmed: ${booking.show.movie.title}`,
+                    body: emailBody
+                });
+
+                console.log('[sendBookingConfirmationEmail] Email sent successfully to:', booking.user.email);
+                return { success: true, email: booking.user.email };
+            } catch (error) {
+                console.error('[sendBookingConfirmationEmail] Error:', error);
+                throw error;
+            }
+        });
     }
 )
 

@@ -123,8 +123,8 @@ export const createBooking = async (req, res) => {
         }]
 
         const session = await stripeInstance.checkout.sessions.create({
-            success_url: `${origin}/loading/my-bookings`,
-            cancel_url: `${origin}/my-bookings`,
+            success_url: `${origin}/loading/my-bookings?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${origin}/my-bookings?payment_cancelled=true`,
             line_items: line_items,
             mode: "payment",
             metadata: {
@@ -292,6 +292,19 @@ export const checkPaymentStatus = async (req, res) => {
                     await booking.save();
                     
                     console.log("[checkPaymentStatus] Booking updated successfully:", booking._id);
+                    
+                    // Send confirmation email via Inngest
+                    try {
+                        await inngest.send({
+                            name: 'app/show.booked',
+                            data: { bookingId: booking._id.toString() }
+                        });
+                        console.log("[checkPaymentStatus] Inngest event sent for booking confirmation email:", booking._id);
+                    } catch (inngestError) {
+                        console.error("[checkPaymentStatus] Failed to send Inngest booking email event:", inngestError);
+                        // Continue - don't fail the response due to email issues
+                    }
+                    
                     return res.json({
                         success: true, 
                         isPaid: true, 

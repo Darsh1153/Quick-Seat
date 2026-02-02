@@ -2,6 +2,8 @@ import { clerkClient } from "@clerk/express";
 import Booking from "../models/Booking.js";
 import Movie from "../models/Movie.js";
 import Show from "../models/Show.js";
+import Stripe from "stripe";
+import { inngest } from "../inngest/index.js";
 
 // API controller function to get user bookings
 export const getUserBookings = async (req, res) => {
@@ -23,9 +25,58 @@ export const getUserBookings = async (req, res) => {
                 showId: b.show?._id,
                 movieTitle: b.show?.movie?.title,
                 amount: b.amount,
+                isPaid: b.isPaid,
+                hasPaymentLink: !!b.paymentLink,
                 bookedSeats: b.bookedSeats
             }))
         });
+
+        // Check payment status for recent unpaid bookings with payment links
+        if (process.env.STRIPE_SECRET_KEY) {
+            const stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
+            const fiveMinutesAgo = new Date(new Date().getTime() - 5 * 60 * 1000);
+            
+            const recentUnpaidBookings = bookings.filter(
+                (b) => !b.isPaid && b.paymentLink && b.createdAt > fiveMinutesAgo
+            );
+
+            if (recentUnpaidBookings.length > 0) {
+                console.log("[getUserBookings] Checking payment status for recent unpaid bookings:", recentUnpaidBookings.length);
+                
+                for (const booking of recentUnpaidBookings) {
+                    try {
+                        // Extract session ID from payment link
+                        const sessionIdMatch = booking.paymentLink.match(/cs_[a-zA-Z0-9_]+/);
+                        if (sessionIdMatch) {
+                            const sessionId = sessionIdMatch[0];
+                            const session = await stripeInstance.checkout.sessions.retrieve(sessionId);
+                            
+                            if (session.payment_status === 'paid') {
+                                console.log("[getUserBookings] Found paid session for booking:", booking._id);
+                                booking.isPaid = true;
+                                booking.paymentLink = "";
+                                await booking.save();
+                                
+                                // Send confirmation email
+                                try {
+                                    await inngest.send({
+                                        name: 'app/show.booked',
+                                        data: { bookingId: booking._id.toString() }
+                                    });
+                                } catch (inngestError) {
+                                    console.error("[getUserBookings] Failed to send confirmation email:", inngestError);
+                                }
+                            }
+                        }
+                    } catch (stripeError) {
+                        console.error("[getUserBookings] Error checking Stripe session:", {
+                            bookingId: booking._id,
+                            error: stripeError.message
+                        });
+                    }
+                }
+            }
+        }
 
         // Clean up unpaid bookings older than 10 minutes (fallback in case Inngest doesn't run)
         const now = new Date();
